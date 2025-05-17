@@ -3,28 +3,63 @@ name: Scheduled Python Worker
 on:
   schedule:
     - cron: "0 17 */2 * *" # 每隔两天 UTC 时间 17:00 (北京时间凌晨 1:00) 运行
-  workflow_dispatch: # 添加手动触发器
+  workflow_dispatch: # 允许手动触发工作流程
 
 jobs:
   run-worker:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Setup Python environment
         uses: ./.github/actions/setup-python
 
-      - name: Install prerequisites
-        run: uv sync --all-extras --dev
+      - name: Check Python version
+        run: |
+          echo "Python version:"
+          python --version
+
+      - name: Cache Python dependencies
+        id: cache-dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/venv  # 根据实际环境调整路径
+          key: ${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}
+
+      - name: Install prerequisites if cache missed
+        if: steps.cache-dependencies.outputs.cache-hit != 'true'
+        run: |
+          echo "Installing dependencies..."
+          uv sync --all-extras --dev || exit 1
 
       - name: Run Python Script
-        run: uv run src/main.py
-
-      - name: Commit and Push
         run: |
-          git config user.name github-actions[bot]
-          git config user.email github-actions[bot]@users.noreply.github.com
-          git add .
-          git diff-index --quiet HEAD || git commit -m "chore: update plugins.json"
-          git push
+          echo "Running script..."
+          set +e # 继续执行后续步骤，即使脚本失败
+          uv run src/main.py
+          exit_code=$?
+          echo "Script exited with code $exit_code"
+          set -e
+
+      - name: Configure Git credentials (if needed)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add, commit, and push changes
+        if: always()
+        run: |
+          git add . && git status --porcelain || true # 查看更改状态
+          echo "Changes detected:"
+          git diff --cached
+
+          if [[ -n $(git diff --cached) ]]; then
+            git commit -m "Auto-commit: Update by GitHub Actions"
+            git push origin main
+          else
+            echo "No changes to commit."
+          fi
