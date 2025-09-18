@@ -13,22 +13,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出仓库代码
+      # 1. 检出代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 创建一个临时文件夹，将 plugins.json 拷贝进去
-      - name: Copy plugins.json
+      # 2. 创建 deploy 文件夹，只放 plugins.json
+      - name: Prepare plugins.json for Pages
         run: |
           mkdir deploy
           cp dist/plugins.json deploy/plugins.json
 
-      # 3. 上传 deploy 文件夹内容作为 Pages 构建产物
-      - name: Upload plugins.json to Pages
-        uses: actions/upload-pages-artifact@v1
+      # 3. 上传 deploy 文件夹到 Pages（使用最新版 upload-pages-artifact v3）
+      - name: Upload plugins.json
+        uses: actions/upload-pages-artifact@v3
         with:
           path: deploy
 
-      # 4. 部署 Pages
+      # 4. 部署到 GitHub Pages（使用最新 deploy-pages v4）
       - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v1
+        uses: actions/deploy-pages@v4
