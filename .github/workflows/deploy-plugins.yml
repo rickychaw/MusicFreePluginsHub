@@ -1,0 +1,34 @@
+name: Deploy plugins.json to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出仓库代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 创建一个临时文件夹，将 plugins.json 拷贝进去
+      - name: Copy plugins.json
+        run: |
+          mkdir deploy
+          cp dist/plugins.json deploy/plugins.json
+
+      # 3. 上传 deploy 文件夹内容作为 Pages 构建产物
+      - name: Upload plugins.json to Pages
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: deploy
+
+      # 4. 部署 Pages
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v1
