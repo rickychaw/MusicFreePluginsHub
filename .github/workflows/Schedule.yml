@@ -2,29 +2,52 @@ name: Scheduled Python Worker
 
 on:
   schedule:
-    - cron: "0 17 */2 * *" # 每隔两天 UTC 时间 17:00 (北京时间凌晨 1:00) 运行
-  workflow_dispatch: # 添加手动触发器
+    - cron: "0 17 */2 * *" # 每隔两天 UTC 时间 17:00 (北京时间凌晨 1:00)
+  workflow_dispatch: # 手动触发
 
 jobs:
   run-worker:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. 检出仓库
       - uses: actions/checkout@v4
 
+      # 2. 设置 Python 环境
       - name: Setup Python environment
         uses: ./.github/actions/setup-python
 
+      # 3. 缓存 Python packages，使用动态 key 避免 400
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ github.run_id }}
+
+      # 4. 安装依赖
       - name: Install prerequisites
         run: uv sync --all-extras --dev
 
-      - name: Run Python Script
-        run: uv run src/main.py
+      # 5. 运行 Python 脚本，自动重试 3 次，每次间隔 60 秒
+      - name: Run Python Script with retry
+        run: |
+          max_attempts=3
+          for attempt in $(seq 1 $max_attempts); do
+            echo "Attempt $attempt of $max_attempts..."
+            uv run src/main.py && break
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Script failed, retrying in 60 seconds..."
+              sleep 60
+            else
+              echo "Script failed after $max_attempts attempts, skipping."
+            fi
+          done
 
+      # 6. 提交更新到仓库
       - name: Commit and Push
         run: |
-          git config user.name github-actions[bot]
-          git config user.email github-actions[bot]@users.noreply.github.com
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           git diff-index --quiet HEAD || git commit -m "chore: update plugins.json"
-          git push
+          git push || echo "Push failed, continuing..."
